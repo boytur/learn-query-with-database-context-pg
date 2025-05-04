@@ -1,6 +1,17 @@
-const express = require('express');
+const express = require('express')
 
-const morgan = require('morgan');
+const morgan = require('morgan')
+const db = require('./db/db.js')
+
+// test connection
+const dbContext = db
+  .connect()
+  .then(() => {
+    console.log('[INFO] Connected to the database')
+  })
+  .catch(err => {
+    console.error('[ERROR] Database connection error:', err)
+  })
 
 morgan(function (tokens, req, res) {
   return [
@@ -14,23 +25,70 @@ morgan(function (tokens, req, res) {
   ].join(' ')
 })
 
-const app = express();
-const port = 9999;
+const app = express()
+const port = 9999
 
-app.use(morgan('dev'));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(morgan('dev'))
+app.use(express.json())
+app.use(express.urlencoded({ extended: true }))
 
-
-app.get('/', (req, res) => { 
-    return res.status(200).json({ 
-        ip: req.ip,
-        method: req.method,
-        message: 'Hello World!' 
-    })
+app.use((req, res, next) => {
+  console.log('Middleware 1')
+  next()
 })
 
-app.listen(port, () => { 
-    console.log(`Server is running at http://localhost:${port}`);
-    console.log(`Press Ctrl+C to stop the server`);
-});
+app.get('/', (req, res) => {
+  return res.status(200).json({
+    ip: req.ip,
+    method: req.method,
+    message: 'Hello World!'
+  })
+})
+
+async function countUsers () {
+  try {
+    const result = await db.query('SELECT COUNT(*) FROM users')
+    return parseInt(result.rows[0].count)
+  } catch (error) {
+    console.error(error)
+    throw error
+  }
+}
+
+app.get('/users', async (req, res) => {
+  const page = parseInt(req.query.page) || 1
+  const limit = parseInt(req.query.limit) || 10
+  const offset = (page - 1) * limit
+  const search = req.query.search || ''
+
+  try {
+    // Query to get the total number of users
+    const result = await db.query(
+      `SELECT * FROM users WHERE LOWER(users.name) 
+       LIKE LOWER($1) ORDER BY id LIMIT $2 OFFSET $3`,
+      [`%${search}%`, limit, offset]
+    )
+
+    // Query to get the total number of users
+    const totalUsers = await countUsers()
+
+    return res.status(200).json({
+      page,
+      limit,
+      total: totalUsers,
+      totalPage: Math.ceil(totalUsers / limit),
+      prevPage: page > 1 ? page - 1 : null,
+      data: result.rows
+    })
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ error: error.message })
+  } finally {
+    await dbContext.complete() // ทำการ commit หลังจากการทำงานเสร็จ
+  }
+})
+
+app.listen(port, () => {
+  console.log(`Server is running at http://localhost:${port}`)
+  console.log(`Press Ctrl+C to stop the server`)
+})

@@ -87,6 +87,51 @@ app.get('/users', async (req, res) => {
   }
 })
 
+app.post('/users', async (req, res) => {
+  try {
+ 
+    const { name, email } = req.body;
+
+    if (!name || !email) {
+      return res.status(400).json({
+        "sucsess": false,
+        "message": "Fail to add user name or email required!"
+      })
+    }
+
+    // find existing email
+
+    const existingEmail = await db.query(
+      `SELECT users.id FROM users WHERE users.email = $1;`,
+      [email]
+    )
+
+    if (existingEmail.rows.length > 0) {
+      return res.status(400).json({
+        "success": false,
+        "message": "This email already has been used!"
+      })
+    }
+
+    // insert to db
+
+    const newUser = await db.query(
+      `INSERT INTO users (name, email, password, created_at) VALUES ($1, $2, $3, $4);`,
+      [name, email, "hassed_password", new Date()]
+    )
+
+    if(newUser.rows){
+      return res.status(201).json({
+        "success": true,
+        "message": "Insert new user successsfully!"
+      })
+    }
+
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ error: error.message })
+  }
+})
 app.get('/posts', async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1

@@ -84,7 +84,38 @@ app.get('/users', async (req, res) => {
     console.error(error)
     res.status(500).json({ error: error.message })
   } finally {
-    await dbContext.complete() // ทำการ commit หลังจากการทำงานเสร็จ
+  }
+})
+
+app.get('/posts', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1
+    const limit = parseInt(req.query.limit) || 10
+    const offset = (page - 1) * limit
+    const search = req.query.search || ''
+
+    const result = await db.query(
+      `SELECT posts.id, posts.title,
+      posts.published, users.id, users.name as author
+      FROM posts
+      LEFT JOIN users ON users.id = posts.user_id
+      WHERE posts.published = true
+      AND posts.title LIKE LOWER($1)
+      ORDER BY posts.id
+      LIMIT $2 OFFSET $3;
+      `,
+      [`%${search}%`, limit, offset]
+    )
+
+    return res.status(200).json({
+      sucess: true,
+      message: 'Get posts successfully',
+      data: result.rows
+    })
+  } catch (error) {
+    console.error(error)
+    res.status(500).json({ error: error.message })
+  } finally {
   }
 })
 
